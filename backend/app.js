@@ -1,29 +1,32 @@
-const e = require('express');
-const c = require('cors');
-const p = require('path');
+// app.js
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
-const R_a = require('./routes/auth');
-const R_pr = require('./routes/products');
-const R_ca = require('./routes/cart');
-const R_o = require('./routes/orders');
+const authRoutes = require('./routes/auth');
+const productRoutes = require('./routes/products');
+const cartRoutes = require('./routes/cart');
+const orderRoutes = require('./routes/orders');
 
-const A = e();
+const app = express();
 
-// middlewares
-A.use(c());
-A.use(e.json());
+// Middleware
+app.use(cors());
+app.use(express.json());
 
-// estáticos
-A.use('/uploads', e.static(p.join(__dirname, 'uploads')));
+// Servir archivos estáticos (imágenes)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// rutas (mismos prefijos funcionales)
-A.use('/api/auth', R_a);
-A.use('/api/products', R_pr);
-A.use('/api/cart', R_ca);
-A.use('/api/orders', R_o);
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/orders', orderRoutes);
 
-// test
-A.get('/', (req, res) => res.json({ message: 'API Tennis Store funcionando correctamente' }));
+// Ruta de prueba
+app.get('/', (req, res) => {
+  res.json({ message: 'API Tennis Store funcionando correctamente' });
+});
 
-module.exports = A;
+module.exports = app;

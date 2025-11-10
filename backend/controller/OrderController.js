@@ -1,59 +1,87 @@
-const ρ = require('../config/database');
-const Κ = require('../model/Cart');
-const { Order: Οr, OrderItem: Οi } = require('../model/Order');
+const pool = require('../config/database');
+const Cart = require('../model/Cart');
+const { Order, OrderItem } = require('../model/Order');
 
-// exportar funciones directamente para evitar errores de Express
-async function createOrder(req, res) {
-  const conn = await ρ.getConnection();
-  try {
-    await conn.beginTransaction();
-
-    const c = await Κ.findByUserId(req.userId);
-    if (!c || c.length === 0) {
-      await conn.rollback();
-      return res.status(400).json({ message: 'El carrito está vacío' });
+class OrderController {
+  static async createOrder(req, res) {
+    const connection = await pool.getConnection();
+    
+    try {
+      await connection.beginTransaction();
+      
+      // Obtener items del carrito
+      const cartItems = await Cart.findByUserId(req.userId);
+      
+      if (cartItems.length === 0) {
+        await connection.rollback();
+        return res.status(400).json({ message: 'El carrito está vacío' });
+      }
+      
+      // Calcular total
+      const total = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      
+      // Crear orden
+      const orderResult = await Order.create({
+        user_id: req.userId,
+        total
+      });
+      
+      const orderId = orderResult.insertId;
+      
+      // Crear items de la orden
+      for (const item of cartItems) {
+        await OrderItem.create({
+          order_id: orderId,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          price: item.price
+        });
+      }
+      
+      // Limpiar carrito
+      await Cart.clearByUserId(req.userId);
+      
+      await connection.commit();
+      
+      res.status(201).json({ 
+        message: 'Orden creada exitosamente', 
+        orderId: orderId,
+        total: total 
+      });
+      
+    } catch (error) {
+      await connection.rollback();
+      console.error(error);
+      res.status(500).json({ message: 'Error al crear orden' });
+    } finally {
+      connection.release();
     }
+  }
 
-    const T = c.reduce((s, it) => s + (it.price * it.quantity), 0);
-    const r = await Οr.create({ user_id: req.userId, total: T });
-    const oid = r.insertId || (r && r.insert_id) || null;
-
-    for (const it of c) {
-      await Οi.create({ order_id: oid, product_id: it.product_id, quantity: it.quantity, price: it.price });
+  static async getUserOrders(req, res) {
+    try {
+      const orders = await Order.findByUserId(req.userId);
+      res.json(orders);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al obtener órdenes' });
     }
+  }
 
-    await Κ.clearByUserId(req.userId);
-    await conn.commit();
-
-    return res.status(201).json({ message: 'Orden creada exitosamente', orderId: oid, total: T });
-  } catch (e) {
-    try { await conn.rollback(); } catch (er) {}
-    console.error(e);
-    return res.status(500).json({ message: 'Error al crear orden' });
-  } finally {
-    try { conn.release(); } catch (er) {}
+  static async getOrderById(req, res) {
+    try {
+      const orderItems = await Order.findByIdAndUserId(req.params.id, req.userId);
+      
+      if (orderItems.length === 0) {
+        return res.status(404).json({ message: 'Orden no encontrada' });
+      }
+      
+      res.json(orderItems);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al obtener orden' });
+    }
   }
 }
 
-async function getUserOrders(req, res) {
-  try {
-    const a = await Οr.findByUserId(req.userId);
-    return res.json(a);
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ message: 'Error al obtener órdenes' });
-  }
-}
-
-async function getOrderById(req, res) {
-  try {
-    const z = await Οr.findByIdAndUserId(req.params.id, req.userId);
-    if (!z || z.length === 0) return res.status(404).json({ message: 'Orden no encontrada' });
-    return res.json(z);
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ message: 'Error al obtener orden' });
-  }
-}
-
-module.exports = { createOrder, getUserOrders, getOrderById };
+module.exports = OrderController;

@@ -1,28 +1,46 @@
-const q = require('mysql2/promise');
+const mysql = require('mysql2/promise');
 
-const F = x => x.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/) 
-  ? { u: RegExp.$1, p: RegExp.$2, h: RegExp.$3, P: +RegExp.$4, d: RegExp.$5 }
-  : null;
+// Función para parsear la URI de MySQL
+function parseDbUrl(url) {
+  const match = url.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
+  if (match) {
+    return {
+      user: match[1],
+      password: match[2],
+      host: match[3],
+      port: parseInt(match[4]),
+      database: match[5]
+    };
+  }
+  return null;
+}
 
-let C = (() => {
-  const e = process.env;
-  let r = e.DATABASE_URL ? F(e.DATABASE_URL) : null;
+// Configuración de la base de datos
+let dbConfig;
 
-  return r
-    ? { ...r, user: r.u, password: r.p, host: r.h, port: r.P, database: r.d,
-        waitForConnections: !0, connectionLimit: 10, queueLimit: 0 }
-    : {
-        host: e.DB_HOST || 'localhost',
-        user: e.DB_USER || 'root',
-        password: e.DB_PASSWORD || '',
-        database: e.DB_NAME || 'tennis_store',
-        port: e.DB_PORT || 3306,
-        waitForConnections: !0,
-        connectionLimit: 10,
-        queueLimit: 0
-      };
-})();
+if (process.env.DATABASE_URL) {
+  // Si hay una URI completa, parsearla
+  const parsedUrl = parseDbUrl(process.env.DATABASE_URL);
+  dbConfig = {
+    ...parsedUrl,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+  };
+} else {
+  // Si no hay URI, usar variables individuales (para desarrollo local)
+  dbConfig = {
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'tennis_store',
+    port: process.env.DB_PORT || 3306,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+  };
+}
 
-const pool = q.createPool(C);
+const pool = mysql.createPool(dbConfig);
 
 module.exports = pool;
